@@ -535,16 +535,32 @@ class Collection(DeprecatedNamesMixin):
         return out.changes
 
     def add_notes(self, requests: Iterable[AddNoteRequest]) -> OpChanges:
+        """
+        Add multiple notes to the collection
+        
+        :param requests: The notes to add to the collection. Do not pass
+        an exhaustible iterable, such as a generator or the result of
+        calling `iter()`, as it will be looped over multiple times. Each
+        note will be updated to have their `id` synched with the ID in
+        the database.
+        :return: The result of the changes
+        """
+
+        backend_requests = []
         for request in requests:
             hooks.note_will_be_added(self, request.note, request.deck_id)
-        out = self._backend.add_notes(
-            requests=[
+            backend_requests.append(
                 notes_pb2.AddNoteRequest(
                     note=request.note._to_backend_note(), deck_id=request.deck_id
                 )
-                for request in requests
-            ]
-        )
+            )
+                
+        second_time = any(requests)
+        if not second_time:
+            raise TypeError("Exhaustable iterable was provided")
+
+        out = self._backend.add_notes(requests=backend_requests)
+        
         for idx, request in enumerate(requests):
             request.note.id = NoteId(out.nids[idx])
 
